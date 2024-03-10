@@ -293,21 +293,6 @@ nav {
   height: 100%;
 }
 
-#canvas1,
-#canvas3,
-#canvas4 {
-  position: absolute;
-  width: 100%;
-}
-#canvas4 {
-  border-top: 1px solid #3c3c3c;
-}
-
-#canvas2 {
-  position: absolute;
-  width: 100%;
-}
-
 #left-wrapper {
   width: 88%;
   border-right: 1px solid #3c3c3c;
@@ -317,37 +302,41 @@ nav {
   width: 12%;
 }
 
-#canvas1 {
-  height: 80%;
-}
-#overlay-canvas1 {
+#canvas-main,
+#canvas-depth,
+#canvas-indi-2,
+#canvas-indi-1 {
   position: absolute;
   width: 100%;
-  height: 80%;
-  z-index: 1;
-}
-#overlay-canvas1:active {
-  cursor: grabbing;
 }
 
-#canvas4,
-#canvas3 {
+#canvas-main,
+#canvas-depth {
+  height: 80%;
+}
+
+#canvas-indi-1,
+#canvas-indi-2 {
   height: 10%;
   top: 80%;
 }
+#canvas-bubble {
+  position: absolute;
+  width: 100%;
+  top: 80%;
+  height: 20%;
+}
 
-#canvas3 {
+#canvas-indi-2 {
   top: 90%;
 }
 
-#canvas2 {
-  height: 80%;
+#canvas-indi-1 {
+  border-top: 1px solid #3c3c3c;
 }
-#overlay-canvas2 {
-  position: absolute;
-  width: 100%;
-  height: 80%;
-  z-index: -1;
+
+#overlay-canvas1:active {
+  cursor: grabbing;
 }
 .loading-animation {
   animation: spin 750ms ease-in-out infinite;
