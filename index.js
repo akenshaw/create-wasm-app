@@ -26,9 +26,9 @@ function adjustDPI(canvas) {
 let canvasIds = [
   "#canvas-main",
   "#canvas-depth",
-  //"#canvas-indi-1",
   "#canvas-indi-2",
   "#canvas-bubble",
+  "#canvas-indi-1",
 ];
 let canvases = canvasIds.map((id) => document.querySelector(id));
 
