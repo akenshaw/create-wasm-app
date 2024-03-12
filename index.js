@@ -46,6 +46,28 @@ window.addEventListener(
   false
 );
 
+async function fetchOI() {
+  try {
+    let response = await fetch(
+      "https://fapi.binance.com/fapi/v1/openInterest?symbol=btcusdt"
+    );
+    let oi = await response.text();
+    manager.fetch_oi(oi);
+  } catch (error) {
+    console.error(error);
+  }
+}
+function scheduleFetchOI() {
+  const now = new Date();
+  const delay = (60 - now.getSeconds() - 1) * 1000 - now.getMilliseconds();
+
+  setTimeout(() => {
+    fetchOI();
+    setInterval(fetchOI, 60000);
+  }, delay);
+}
+scheduleFetchOI();
+
 async function fetchDepthAsync() {
   try {
     let response = await fetch(
@@ -57,5 +79,4 @@ async function fetchDepthAsync() {
     console.error(error);
   }
 }
-
 setInterval(fetchDepthAsync, 12000);
