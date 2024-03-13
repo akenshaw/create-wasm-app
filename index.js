@@ -37,6 +37,10 @@ canvases.forEach(adjustDPI);
 let manager = wasm_module.CanvasManager.new(...canvases);
 manager.initialize_ws();
 fetchDepthAsync();
+setInterval(fetchDepthAsync, 12000);
+initialKlineFetch();
+fetchHistOI();
+scheduleFetchOI();
 
 window.addEventListener(
   "renderEvent",
@@ -46,6 +50,15 @@ window.addEventListener(
   false
 );
 
+function scheduleFetchOI() {
+  const now = new Date();
+  const delay = (60 - now.getSeconds() - 1) * 1000 - now.getMilliseconds();
+
+  setTimeout(() => {
+    fetchOI();
+    setInterval(fetchOI, 60000);
+  }, delay);
+}
 async function fetchOI() {
   try {
     let response = await fetch(
@@ -57,17 +70,17 @@ async function fetchOI() {
     console.error(error);
   }
 }
-function scheduleFetchOI() {
-  const now = new Date();
-  const delay = (60 - now.getSeconds() - 1) * 1000 - now.getMilliseconds();
-
-  setTimeout(() => {
-    fetchOI();
-    setInterval(fetchOI, 60000);
-  }, delay);
+async function fetchHistOI() {
+  try {
+    let response = await fetch(
+      "https://fapi.binance.com/futures/data/openInterestHist?symbol=btcusdt&period=5m&limit=12"
+    );
+    let hist_oi = await response.text();
+    manager.fetch_hist_oi(hist_oi);
+  } catch (error) {
+    console.error(error);
+  }
 }
-scheduleFetchOI();
-
 async function fetchDepthAsync() {
   try {
     let response = await fetch(
@@ -79,4 +92,53 @@ async function fetchDepthAsync() {
     console.error(error);
   }
 }
-setInterval(fetchDepthAsync, 12000);
+async function initialKlineFetch() {
+  try {
+    let response = await fetch(
+      "https://fapi.binance.com/fapi/v1/klines?symbol=btcusdt&interval=1m&limit=1000"
+    );
+    let klines = await response.text();
+    manager.fetch_klines(klines);
+  } catch (error) {
+    console.error(error);
+  }
+}
+async function fetchHistTrades(
+  symbol,
+  startTime,
+  endTime,
+  limit,
+  retryCount = 0
+) {
+  try {
+    const url = `https://fapi.binance.com/fapi/v1/aggTrades?symbol=${symbol}${
+      startTime ? "&startTime=" + startTime : ""
+    }${endTime ? "&endTime=" + endTime : ""}${limit ? "&limit=" + limit : ""}`;
+    const response = await fetch(url);
+
+    if (response.status === 429) {
+      const waitTime = Math.pow(2, retryCount) * 1000;
+      console.log(
+        `Rate limit exceeded, pausing for ${waitTime / 1000} seconds...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      return fetchHistTrades(symbol, startTime, endTime, limit, retryCount + 1);
+    }
+
+    const data = await response.json();
+    const trades = data.map((trade) => {
+      return {
+        x: trade.T,
+        y: parseFloat(trade.p),
+        q: parseFloat(trade.q),
+        m: trade.m,
+      };
+    });
+
+    console.log(`Fetched ${trades.length} trades.`);
+    return trades;
+  } catch (error) {
+    console.log(error, url);
+    return NaN;
+  }
+}
