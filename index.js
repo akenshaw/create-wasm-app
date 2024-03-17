@@ -259,19 +259,23 @@ let canvases = canvasIds.map((id) => document.querySelector(id));
 canvases.forEach(adjustDPI);
 
 let manager = wasm_module.CanvasManager.new(...canvases);
-window.addEventListener(
-  "renderEvent",
-  function (e) {
-    manager.render();
-  },
-  false
-);
+//window.addEventListener(
+//  "renderEvent",
+//  function (e) {
+//    manager.render();
+//  },
+//  false
+//);
 manager.initialize_ws();
 fetchDepthAsync();
 setInterval(fetchDepthAsync, 12000);
 initialKlineFetch();
 fetchHistOI();
 scheduleFetchOI();
+
+setInterval(() => {
+  manager.render();
+}, 1000 / 30);
 
 let canvasMain = document.querySelector("#canvas-main");
 // Panning
