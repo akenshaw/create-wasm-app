@@ -278,6 +278,8 @@ setInterval(() => {
 }, 1000 / 30);
 
 let canvasMain = document.querySelector("#canvas-main");
+let canvasIndi1 = document.querySelector("#canvas-indi-1");
+let canvasIndi2 = document.querySelector("#canvas-indi-2");
 // Panning
 let isDragging = false;
 let startDragX = 0;
@@ -297,6 +299,15 @@ canvasMain.addEventListener("mouseup", function (event) {
 });
 canvasMain.addEventListener("mouseleave", function (event) {
   isDragging = false;
+});
+// Zoom X
+canvasIndi1.addEventListener("wheel", function (event) {
+  event.preventDefault();
+  manager.zoom_x(-event.deltaY);
+});
+canvasIndi2.addEventListener("wheel", function (event) {
+  event.preventDefault();
+  manager.zoom_x(-event.deltaY);
 });
 
 function scheduleFetchOI() {
