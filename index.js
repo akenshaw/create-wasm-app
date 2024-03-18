@@ -1,5 +1,12 @@
 import * as wasm_module from "rsdepth";
-import { combineDicts } from "./connectorUtils.js";
+import {
+  combineDicts,
+  fetchDepthAsync,
+  fetchHistOI,
+  fetchOI,
+  initialKlineFetch,
+  fetchHistTrades,
+} from "./connectorUtils.js";
 
 console[window.crossOriginIsolated ? "log" : "error"](
   "Cross-origin isolation is " +
@@ -258,25 +265,93 @@ let canvasIds = [
 let canvases = canvasIds.map((id) => document.querySelector(id));
 canvases.forEach(adjustDPI);
 
+let currentSymbol = "btcusdt";
+
 let manager = wasm_module.CanvasManager.new(...canvases);
-//window.addEventListener(
-//  "renderEvent",
-//  function (e) {
-//    manager.render();
-//  },
-//  false
-//);
 manager.initialize_ws();
-fetchDepthAsync();
-setInterval(fetchDepthAsync, 12000);
-initialKlineFetch();
-fetchHistOI();
-scheduleFetchOI();
 
 setInterval(() => {
   manager.render();
 }, 1000 / 30);
 
+fetchDepthAsync(currentSymbol).then((depth) => {
+  manager.fetch_depth(depth);
+});
+setInterval(() => {
+  fetchDepthAsync(currentSymbol).then((depth) => {
+    manager.fetch_depth(depth);
+  });
+}, 12000);
+
+scheduleFetchOI();
+function scheduleFetchOI() {
+  const now = new Date();
+  const delay = (60 - now.getSeconds() - 1) * 1000 - now.getMilliseconds();
+
+  setTimeout(() => {
+    fetchOI(currentSymbol).then((oi) => {
+      manager.fetch_oi(oi);
+    });
+    setInterval(() => {
+      fetchOI(currentSymbol).then((oi) => {
+        manager.fetch_oi(oi);
+      });
+    }, 60000);
+  }, delay);
+}
+
+fetchHistOI(currentSymbol).then((histOI) => {
+  manager.gather_hist_oi(histOI);
+});
+
+initialKlineFetch(currentSymbol).then((klines) => {
+  manager.fetch_klines(klines);
+  //const keys = manager.get_kline_ohlcv_keys();
+  //getHistTrades("btcusdt", keys, manager);
+});
+async function getHistTrades(symbol, dp, manager) {
+  for (let i = dp.length - 1; i >= 0; i--) {
+    let startTime = Number(dp[i]);
+    const endTime = startTime + 59999;
+    let trades = [];
+    let lastTradeTime = 0;
+    console.log(
+      "getting historical trades:",
+      i + 1,
+      "of",
+      dp.length,
+      "klines..."
+    );
+    while (true) {
+      try {
+        const fetchedTrades = await fetchHistTrades(
+          symbol,
+          startTime,
+          endTime,
+          1000
+        );
+        trades = trades.concat(fetchedTrades);
+        if (fetchedTrades.length > 0) {
+          lastTradeTime = fetchedTrades[fetchedTrades.length - 1].time;
+          startTime = lastTradeTime + 1;
+        }
+        if (fetchedTrades.length < 1000) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      } catch (error) {
+        console.log(error, startTime, endTime);
+        break;
+      }
+    }
+    manager.concat_hist_trades(
+      JSON.stringify(trades),
+      (endTime - 59999).toString()
+    );
+  }
+}
+
+// Canvas event listeners
 let canvasMain = document.querySelector("#canvas-main");
 let canvasIndi1 = document.querySelector("#canvas-indi-1");
 let canvasIndi2 = document.querySelector("#canvas-indi-2");
@@ -309,135 +384,3 @@ canvasIndi2.addEventListener("wheel", function (event) {
   event.preventDefault();
   manager.zoom_x(-event.deltaY);
 });
-
-function scheduleFetchOI() {
-  const now = new Date();
-  const delay = (60 - now.getSeconds() - 1) * 1000 - now.getMilliseconds();
-
-  setTimeout(() => {
-    fetchOI();
-    setInterval(fetchOI, 60000);
-  }, delay);
-}
-async function fetchOI() {
-  try {
-    let response = await fetch(
-      "https://fapi.binance.com/fapi/v1/openInterest?symbol=btcusdt"
-    );
-    let oi = await response.text();
-    manager.fetch_oi(oi);
-  } catch (error) {
-    console.error(error);
-  }
-}
-async function fetchHistOI() {
-  try {
-    let response = await fetch(
-      "https://fapi.binance.com/futures/data/openInterestHist?symbol=btcusdt&period=5m&limit=12"
-    );
-    let hist_oi = await response.text();
-    manager.fetch_hist_oi(hist_oi);
-  } catch (error) {
-    console.error(error);
-  }
-}
-async function fetchDepthAsync() {
-  try {
-    let response = await fetch(
-      "https://fapi.binance.com/fapi/v1/depth?symbol=btcusdt&limit=1000"
-    );
-    let depth = await response.text();
-    manager.fetch_depth(depth);
-  } catch (error) {
-    console.error(error);
-  }
-}
-async function initialKlineFetch() {
-  try {
-    let response = await fetch(
-      "https://fapi.binance.com/fapi/v1/klines?symbol=btcusdt&interval=1m&limit=60"
-    );
-    let klines = await response.text();
-    manager.fetch_klines(klines);
-  } catch (error) {
-    console.error(error);
-  }
-}
-async function fetchHistTrades(
-  symbol,
-  startTime,
-  endTime,
-  limit,
-  retryCount = 0
-) {
-  try {
-    const url = `https://fapi.binance.com/fapi/v1/aggTrades?symbol=${symbol}${
-      startTime ? "&startTime=" + startTime : ""
-    }${endTime ? "&endTime=" + endTime : ""}${limit ? "&limit=" + limit : ""}`;
-    const response = await fetch(url);
-
-    if (response.status === 429) {
-      const waitTime = Math.pow(2, retryCount) * 1000;
-      console.log(
-        `Rate limit exceeded, pausing for ${waitTime / 1000} seconds...`
-      );
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
-      return fetchHistTrades(symbol, startTime, endTime, limit, retryCount + 1);
-    }
-
-    const data = await response.json();
-    const trades = data.map((trade) => {
-      return {
-        x: trade.T,
-        y: parseFloat(trade.p),
-        q: parseFloat(trade.q),
-        m: trade.m,
-      };
-    });
-
-    console.log(`Fetched ${trades.length} trades.`);
-    return trades;
-  } catch (error) {
-    console.log(error, url);
-    return NaN;
-  }
-}
-async function getHistTrades(symbol, dp) {
-  for (let i = 0; i < dp.length; i++) {
-    const kline = dp[i];
-    let startTime = kline.startTime;
-    const endTime = kline.endTime;
-    let trades = [];
-    let lastTradeTime = 0;
-    console.log(
-      "getting historical trades:",
-      i + 1,
-      "of",
-      dp_length,
-      "klines..."
-    );
-    while (true) {
-      try {
-        const fetchedTrades = await fetchHistTrades(
-          currentSymbol,
-          startTime,
-          endTime,
-          1000
-        );
-        trades = trades.concat(fetchedTrades);
-        if (fetchedTrades.length > 0) {
-          lastTradeTime = fetchedTrades[fetchedTrades.length - 1].x;
-          startTime = lastTradeTime + 1;
-        }
-        if (fetchedTrades.length < 1000) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 400));
-      } catch (error) {
-        console.log(error, startTime, endTime);
-        break;
-      }
-    }
-    dp[i] = trades;
-  }
-}
