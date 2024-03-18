@@ -1,3 +1,4 @@
+// tickers table fetch
 export async function combineDicts() {
   let currentTime = Date.now();
   let startTime = currentTime - 25 * 60 * 60 * 1000;
@@ -45,7 +46,6 @@ export async function combineDicts() {
   });
   return combined_dict;
 }
-
 async function fetch_hist_OI(symbol, startTime, endTime) {
   let current_OI;
   try {
@@ -64,7 +64,6 @@ async function fetch_hist_OI(symbol, startTime, endTime) {
     return { open_interest: current_OI, OI_24hrChange: NaN };
   }
 }
-
 async function fetch_current_OI(symbol) {
   try {
     const response = await fetch(
@@ -77,7 +76,6 @@ async function fetch_current_OI(symbol) {
     return NaN;
   }
 }
-
 async function fetchPremiumIndexes() {
   let fr_dict = {};
 
@@ -96,7 +94,6 @@ async function fetchPremiumIndexes() {
   }
   return fr_dict;
 }
-
 async function fetch24hrMetrics() {
   let turnovers_dict = {};
 
@@ -113,4 +110,85 @@ async function fetch24hrMetrics() {
     };
   }
   return turnovers_dict;
+}
+
+// canvas fetch
+export async function fetchOI(symbol) {
+  try {
+    let response = await fetch(
+      `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`
+    );
+    return await response.text();
+  } catch (error) {
+    console.error(error);
+  }
+}
+export async function fetchHistOI(symbol) {
+  try {
+    let response = await fetch(
+      `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=12`
+    );
+    return await response.text();
+  } catch (error) {
+    console.error(error);
+  }
+}
+export async function fetchDepthAsync(symbol) {
+  try {
+    let response = await fetch(
+      `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=1000`
+    );
+    return await response.text();
+  } catch (error) {
+    console.error(error);
+  }
+}
+export async function initialKlineFetch(symbol) {
+  try {
+    let response = await fetch(
+      `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1m&limit=60`
+    );
+    return await response.text();
+  } catch (error) {
+    console.error(error);
+  }
+}
+export async function fetchHistTrades(
+  symbol,
+  startTime,
+  endTime,
+  limit,
+  retryCount = 0
+) {
+  try {
+    const url = `https://fapi.binance.com/fapi/v1/aggTrades?symbol=${symbol}${
+      startTime ? "&startTime=" + startTime : ""
+    }${endTime ? "&endTime=" + endTime : ""}${limit ? "&limit=" + limit : ""}`;
+    const response = await fetch(url);
+
+    if (response.status === 429) {
+      const waitTime = Math.pow(2, retryCount) * 1000;
+      console.log(
+        `Rate limit exceeded, pausing for ${waitTime / 1000} seconds...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      return fetchHistTrades(symbol, startTime, endTime, limit, retryCount + 1);
+    }
+
+    const data = await response.json();
+    const trades = data.map((trade) => {
+      return {
+        price: parseFloat(trade.p),
+        quantity: parseFloat(trade.q),
+        time: trade.T,
+        is_buyer_maker: trade.m,
+      };
+    });
+
+    //console.log(`Fetched ${trades.length} trades.`);
+    return trades;
+  } catch (error) {
+    console.log(error, url);
+    return NaN;
+  }
 }
