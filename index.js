@@ -244,6 +244,47 @@ function generateTable(data) {
   }
 }
 
+function canvasStarter(symbol, price) {}
+
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+function adjustDPIonResize(canvas, index) {
+  let dpi = window.devicePixelRatio;
+  let style_height = +getComputedStyle(canvas)
+    .getPropertyValue("height")
+    .slice(0, -2);
+  let style_width = +getComputedStyle(canvas)
+    .getPropertyValue("width")
+    .slice(0, -2);
+  canvas.setAttribute("height", style_height * dpi);
+  canvas.setAttribute("width", style_width * dpi);
+
+  new_widths[index] = style_width * dpi;
+  new_heights[index] = style_height * dpi;
+}
+
+let new_widths = [];
+let new_heights = [];
+
+window.addEventListener(
+  "resize",
+  debounce(() => {
+    console.log("resizing...");
+    canvases.forEach((canvas, i) => adjustDPIonResize(canvas, i));
+    manager.resize(new_widths, new_heights);
+  }, 300)
+);
+
 function adjustDPI(canvas) {
   let dpi = window.devicePixelRatio;
   let style_height = +getComputedStyle(canvas)
@@ -266,9 +307,10 @@ let canvases = canvasIds.map((id) => document.querySelector(id));
 canvases.forEach(adjustDPI);
 
 let currentSymbol = "btcusdt";
+let depthIntervalId, oiIntervalId;
 
 let manager = wasm_module.CanvasManager.new(...canvases);
-manager.initialize_ws();
+manager.initialize_ws(currentSymbol);
 
 setInterval(() => {
   manager.render();
@@ -277,13 +319,14 @@ setInterval(() => {
 fetchDepthAsync(currentSymbol).then((depth) => {
   manager.fetch_depth(depth);
 });
-setInterval(() => {
+depthIntervalId = setInterval(() => {
   fetchDepthAsync(currentSymbol).then((depth) => {
     manager.fetch_depth(depth);
   });
 }, 12000);
 
 scheduleFetchOI();
+
 function scheduleFetchOI() {
   const now = new Date();
   const delay = (60 - now.getSeconds() - 1) * 1000 - now.getMilliseconds();
@@ -292,12 +335,26 @@ function scheduleFetchOI() {
     fetchOI(currentSymbol).then((oi) => {
       manager.fetch_oi(oi);
     });
-    setInterval(() => {
+    if (oiIntervalId) {
+      clearInterval(oiIntervalId);
+    }
+    oiIntervalId = setInterval(() => {
       fetchOI(currentSymbol).then((oi) => {
         manager.fetch_oi(oi);
       });
     }, 60000);
   }, delay);
+}
+
+function changeSymbol(newSymbol) {
+  currentSymbol = newSymbol;
+  if (depthIntervalId) {
+    clearInterval(depthIntervalId);
+  }
+  if (oiIntervalId) {
+    clearInterval(oiIntervalId);
+  }
+  scheduleFetchOI();
 }
 
 fetchHistOI(currentSymbol).then((histOI) => {
@@ -351,10 +408,11 @@ async function getHistTrades(symbol, dp, manager) {
   }
 }
 
-// Canvas event listeners
+// Canvas event listeners //
 let canvasMain = document.querySelector("#canvas-main");
 let canvasIndi1 = document.querySelector("#canvas-indi-1");
 let canvasIndi2 = document.querySelector("#canvas-indi-2");
+
 // Panning
 let isDragging = false;
 let startDragX = 0;
@@ -375,6 +433,7 @@ canvasMain.addEventListener("mouseup", function (event) {
 canvasMain.addEventListener("mouseleave", function (event) {
   isDragging = false;
 });
+
 // Zoom X
 canvasIndi1.addEventListener("wheel", function (event) {
   event.preventDefault();
