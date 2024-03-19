@@ -244,7 +244,9 @@ function generateTable(data) {
   }
 }
 
-function canvasStarter(symbol, price) {}
+function canvasStarter(symbol, price) {
+  changeSymbol(symbol.toLowerCase());
+}
 
 function debounce(func, wait) {
   let timeout;
@@ -310,23 +312,49 @@ let currentSymbol = "btcusdt";
 let depthIntervalId, oiIntervalId;
 
 let manager = wasm_module.CanvasManager.new(...canvases);
-manager.initialize_ws(currentSymbol);
+changeSymbol(currentSymbol);
 
 setInterval(() => {
   manager.render();
 }, 1000 / 30);
 
-fetchDepthAsync(currentSymbol).then((depth) => {
-  manager.fetch_depth(depth);
-});
-depthIntervalId = setInterval(() => {
+function changeSymbol(newSymbol) {
+  if (depthIntervalId) {
+    clearInterval(depthIntervalId);
+  }
+  if (oiIntervalId) {
+    clearInterval(oiIntervalId);
+  }
+
+  currentSymbol = newSymbol;
+  manager.initialize_ws(currentSymbol);
+
+  if (tickersMenu.style.display === "block") {
+    showTickers();
+  }
+
   fetchDepthAsync(currentSymbol).then((depth) => {
     manager.fetch_depth(depth);
   });
-}, 12000);
+  initialKlineFetch(currentSymbol).then((klines) => {
+    manager.fetch_klines(klines);
+    //const keys = manager.get_kline_ohlcv_keys();
+    //getHistTrades("btcusdt", keys, manager);
+  });
+  fetchHistOI(currentSymbol).then((histOI) => {
+    manager.gather_hist_oi(histOI);
+  });
 
-scheduleFetchOI();
-
+  scheduleFetchOI();
+  scheduleFetchDepth();
+}
+function scheduleFetchDepth() {
+  depthIntervalId = setInterval(() => {
+    fetchDepthAsync(currentSymbol).then((depth) => {
+      manager.fetch_depth(depth);
+    });
+  }, 12000);
+}
 function scheduleFetchOI() {
   const now = new Date();
   const delay = (60 - now.getSeconds() - 1) * 1000 - now.getMilliseconds();
@@ -346,26 +374,6 @@ function scheduleFetchOI() {
   }, delay);
 }
 
-function changeSymbol(newSymbol) {
-  currentSymbol = newSymbol;
-  if (depthIntervalId) {
-    clearInterval(depthIntervalId);
-  }
-  if (oiIntervalId) {
-    clearInterval(oiIntervalId);
-  }
-  scheduleFetchOI();
-}
-
-fetchHistOI(currentSymbol).then((histOI) => {
-  manager.gather_hist_oi(histOI);
-});
-
-initialKlineFetch(currentSymbol).then((klines) => {
-  manager.fetch_klines(klines);
-  //const keys = manager.get_kline_ohlcv_keys();
-  //getHistTrades("btcusdt", keys, manager);
-});
 async function getHistTrades(symbol, dp, manager) {
   for (let i = dp.length - 1; i >= 0; i--) {
     let startTime = Number(dp[i]);
