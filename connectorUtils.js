@@ -66,7 +66,7 @@ async function fetch_hist_OI(symbol, startTime, endTime) {
 
     return { open_interest: current_OI, OI_24hrChange: OI_24hrChange };
   } catch (error) {
-    console.log(error, symbol);
+    console.error(error, symbol);
     return { open_interest: current_OI, OI_24hrChange: NaN };
   }
 }
@@ -78,7 +78,7 @@ async function fetch_current_OI(symbol) {
     const data = await response.json();
     return Number(data["openInterest"]);
   } catch (error) {
-    console.log(error, symbol);
+    console.error(error, symbol);
     return NaN;
   }
 }
