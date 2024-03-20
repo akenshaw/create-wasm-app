@@ -1,9 +1,5 @@
 // tickers table fetch
 export async function combineDicts() {
-  let currentTime = Date.now();
-  let startTime = currentTime - 25 * 60 * 60 * 1000;
-  let endTime = startTime + 60 * 60 * 1000;
-
   let combined_dict = {};
 
   const [fr_dict, turnovers_dict] = await Promise.all([
@@ -30,21 +26,30 @@ export async function combineDicts() {
         "SRMUSDT",
       ].includes(symbol) && !symbol.includes("_")
   );
+  symbols.forEach((symbol) => {
+    if (turnovers_dict.hasOwnProperty(symbol)) {
+      combined_dict[symbol] = {
+        ...fr_dict[symbol],
+        ...turnovers_dict[symbol],
+      };
+    }
+  });
+  return combined_dict;
+}
+export async function tickersOIfetch(symbols, startTime, endTime) {
   const hist_OI_promises = symbols.map((symbol) =>
     fetch_hist_OI(symbol, startTime, endTime)
   );
   const hist_OI_data_arr = await Promise.all(hist_OI_promises);
 
+  let hist_OI_dict = {};
   symbols.forEach((symbol, i) => {
-    if (turnovers_dict.hasOwnProperty(symbol)) {
-      combined_dict[symbol] = {
-        ...fr_dict[symbol],
-        ...turnovers_dict[symbol],
-        ...hist_OI_data_arr[i],
-      };
-    }
+    hist_OI_dict[symbol] = {
+      ...hist_OI_data_arr[i],
+    };
   });
-  return combined_dict;
+
+  return hist_OI_dict;
 }
 async function fetch_hist_OI(symbol, startTime, endTime) {
   let current_OI;
@@ -61,6 +66,7 @@ async function fetch_hist_OI(symbol, startTime, endTime) {
 
     return { open_interest: current_OI, OI_24hrChange: OI_24hrChange };
   } catch (error) {
+    console.log(error, symbol);
     return { open_interest: current_OI, OI_24hrChange: NaN };
   }
 }
@@ -190,5 +196,21 @@ export async function fetchHistTrades(
   } catch (error) {
     console.log(error, url);
     return NaN;
+  }
+}
+export async function fetchTickerInfo(symbol) {
+  const response = await fetch(`https://fapi.binance.com/fapi/v1/exchangeInfo`);
+  const data = await response.json();
+
+  let symbol_info = data["symbols"].find(
+    (x) => x.symbol === symbol.toUpperCase()
+  );
+  if (symbol_info) {
+    return [
+      symbol_info["filters"][0]["tickSize"],
+      symbol_info["filters"][2]["minQty"],
+    ];
+  } else {
+    return null;
   }
 }
