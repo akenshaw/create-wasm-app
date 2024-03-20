@@ -6,6 +6,8 @@ import {
   fetchOI,
   initialKlineFetch,
   fetchHistTrades,
+  fetchTickerInfo,
+  tickersOIfetch,
 } from "./connectorUtils.js";
 
 console[window.crossOriginIsolated ? "log" : "error"](
@@ -62,24 +64,38 @@ function updateLastUpdatedInfo() {
 
 const tickersUpdateBtn = document.getElementById("tickers-update-btn");
 tickersUpdateBtn.addEventListener("click", function () {
+  updateTable();
+});
+
+function updateTable() {
   tickersUpdateBtn.className = "loading-animation";
   tickersUpdateBtn.disabled = true;
   combineDicts().then((data) => {
     tickersUpdateBtn.className = "";
     generateTable(data);
-    updateLastUpdatedInfo();
-    tickersUpdateBtn.disabled = false;
-  });
-});
 
-tickersUpdateBtn.className = "loading-animation";
-tickersUpdateBtn.disabled = true;
-combineDicts().then((data) => {
-  tickersUpdateBtn.className = "";
-  generateTable(data);
-  updateLastUpdatedInfo();
-  tickersUpdateBtn.disabled = false;
-});
+    let currentTime = Date.now();
+    let startTime = currentTime - 25 * 60 * 60 * 1000;
+    let endTime = startTime + 60 * 60 * 1000;
+
+    tickersOIfetch(Object.keys(data), startTime, endTime).then(
+      (hist_OI_data) => {
+        Object.keys(hist_OI_data).forEach((symbol) => {
+          if (data.hasOwnProperty(symbol)) {
+            data[symbol] = {
+              ...data[symbol],
+              ...hist_OI_data[symbol],
+            };
+          }
+        });
+        generateTable(data);
+        tickersUpdateBtn.disabled = false;
+      }
+    );
+    updateLastUpdatedInfo();
+  });
+}
+updateTable();
 
 function showMenu() {
   console.log("show menu");
@@ -210,12 +226,20 @@ function generateTable(data) {
     row.cells[2].textContent =
       (Math.round(symbolData.change * 100) / 100).toFixed(2) + "%";
     row.cells[3].textContent = symbolData.funding_rate + "%";
-    row.cells[4].textContent = formatNumber(
-      symbolData.open_interest,
-      "open_interest",
-      symbolData.mark_price
-    );
-    row.cells[5].textContent = symbolData.OI_24hrChange + "%";
+    row.cells[4].textContent =
+      data.hasOwnProperty(symbol) &&
+      data[symbol].hasOwnProperty("open_interest")
+        ? formatNumber(
+            data[symbol].open_interest,
+            "open_interest",
+            data[symbol].mark_price
+          )
+        : "...";
+    row.cells[5].textContent =
+      data.hasOwnProperty(symbol) &&
+      data[symbol].hasOwnProperty("OI_24hrChange")
+        ? data[symbol].OI_24hrChange + "%"
+        : "...";
     row.cells[6].textContent = formatNumber(
       symbolData.volume,
       "volume",
@@ -318,20 +342,22 @@ setInterval(() => {
   manager.render();
 }, 1000 / 30);
 
+const tickSizeBtn = document.querySelector("#ticksize-select");
+tickSizeBtn.addEventListener("change", function () {
+  manager.set_tick_size(tickSizeBtn.value);
+});
+
 function changeSymbol(newSymbol) {
-  if (depthIntervalId) {
-    clearInterval(depthIntervalId);
-  }
-  if (oiIntervalId) {
-    clearInterval(oiIntervalId);
-  }
+  depthIntervalId ? clearInterval(depthIntervalId) : null;
+  oiIntervalId ? clearInterval(oiIntervalId) : null;
 
   currentSymbol = newSymbol;
-  manager.initialize_ws(currentSymbol);
 
-  if (tickersMenu.style.display === "block") {
-    showTickers();
-  }
+  fetchTickerInfo(currentSymbol).then(([tickSize, minQty]) => {
+    manager.set_symbol_info(tickSize, minQty, tickSizeBtn.value);
+  });
+
+  manager.initialize_ws(currentSymbol);
 
   fetchDepthAsync(currentSymbol).then((depth) => {
     manager.fetch_depth(depth);
@@ -347,6 +373,12 @@ function changeSymbol(newSymbol) {
 
   scheduleFetchOI();
   scheduleFetchDepth();
+
+  document.querySelector("#tickerInfo-name").textContent =
+    currentSymbol.toUpperCase();
+  if (tickersMenu.style.display === "block") {
+    showTickers();
+  }
 }
 function scheduleFetchDepth() {
   depthIntervalId = setInterval(() => {
