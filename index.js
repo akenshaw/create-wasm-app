@@ -71,7 +71,6 @@ function updateTable() {
   tickersUpdateBtn.className = "loading-animation";
   tickersUpdateBtn.disabled = true;
   combineDicts().then((data) => {
-    tickersUpdateBtn.className = "";
     generateTable(data);
 
     let currentTime = Date.now();
@@ -90,6 +89,7 @@ function updateTable() {
         });
         generateTable(data);
         tickersUpdateBtn.disabled = false;
+        tickersUpdateBtn.className = "";
       }
     );
     updateLastUpdatedInfo();
@@ -360,12 +360,12 @@ function changeSymbol(newSymbol) {
   manager.initialize_ws(currentSymbol);
 
   fetchDepthAsync(currentSymbol).then((depth) => {
-    manager.fetch_depth(depth);
+    manager.gather_depth(depth);
   });
   initialKlineFetch(currentSymbol).then((klines) => {
-    manager.fetch_klines(klines);
+    manager.gather_klines(klines);
     //const keys = manager.get_kline_ohlcv_keys();
-    //getHistTrades("btcusdt", keys, manager);
+    //getHistTrades(currentSymbol, keys, manager);
   });
   fetchHistOI(currentSymbol).then((histOI) => {
     manager.gather_hist_oi(histOI);
@@ -383,7 +383,7 @@ function changeSymbol(newSymbol) {
 function scheduleFetchDepth() {
   depthIntervalId = setInterval(() => {
     fetchDepthAsync(currentSymbol).then((depth) => {
-      manager.fetch_depth(depth);
+      manager.gather_depth(depth);
     });
   }, 12000);
 }
@@ -393,14 +393,14 @@ function scheduleFetchOI() {
 
   setTimeout(() => {
     fetchOI(currentSymbol).then((oi) => {
-      manager.fetch_oi(oi);
+      manager.gather_oi(oi);
     });
     if (oiIntervalId) {
       clearInterval(oiIntervalId);
     }
     oiIntervalId = setInterval(() => {
       fetchOI(currentSymbol).then((oi) => {
-        manager.fetch_oi(oi);
+        manager.gather_oi(oi);
       });
     }, 60000);
   }, delay);
@@ -441,7 +441,7 @@ async function getHistTrades(symbol, dp, manager) {
         break;
       }
     }
-    manager.concat_hist_trades(
+    manager.gather_hist_trades(
       JSON.stringify(trades),
       (endTime - 59999).toString()
     );
