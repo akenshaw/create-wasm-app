@@ -364,8 +364,8 @@ function changeSymbol(newSymbol) {
   });
   initialKlineFetch(currentSymbol).then((klines) => {
     manager.gather_klines(klines);
-    //const keys = manager.get_kline_ohlcv_keys();
-    //getHistTrades(currentSymbol, keys, manager);
+    const keys = manager.get_kline_ohlcv_keys();
+    getHistTrades(currentSymbol, keys, manager);
   });
   fetchHistOI(currentSymbol).then((histOI) => {
     manager.gather_hist_oi(histOI);
@@ -407,6 +407,35 @@ function scheduleFetchOI() {
 }
 
 async function getHistTrades(symbol, dp, manager) {
+  // get current kline first
+  let startTime = Number(dp[dp.length - 1]) + 60000;
+  const endTime = Date.now();
+  let trades = [];
+  let lastTradeTime = 0;
+  console.log("getting current trades...");
+  do {
+    try {
+      const fetchedTrades = await fetchHistTrades(
+        symbol,
+        startTime,
+        endTime,
+        1000
+      );
+      trades = trades.concat(fetchedTrades);
+      lastTradeTime = fetchedTrades[fetchedTrades.length - 1].x;
+      startTime = lastTradeTime + 1;
+      console.log("fetched", fetchedTrades.length, "trades");
+    } catch (error) {
+      console.log(error, startTime, null);
+      break;
+    }
+  } while (lastTradeTime < endTime);
+  manager.gather_hist_trades(
+    JSON.stringify(trades),
+    (endTime - 59999).toString()
+  );
+
+  // get historical klines after
   for (let i = dp.length - 1; i >= 0; i--) {
     let startTime = Number(dp[i]);
     const endTime = startTime + 59999;
@@ -420,6 +449,10 @@ async function getHistTrades(symbol, dp, manager) {
       "klines..."
     );
     while (true) {
+      if (symbol != currentSymbol) {
+        console.log("stopped fetching historical trades for", symbol);
+        return;
+      }
       try {
         const fetchedTrades = await fetchHistTrades(
           symbol,
